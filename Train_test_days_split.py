@@ -10,8 +10,8 @@ import geopy.distance
 import csv
 import scipy.io
 
-orig_file_path = '/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF'
-
+#orig_file_path = '/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF'
+orig_file_path = '/Volumes/share-wrf3/ML-WRF/'
 
 def train_test_filename(orig_filenames):
     """
@@ -35,11 +35,14 @@ def read_orig_file_from_wrf(filename):
     surr_arr = np.array(surr_arr)[keep_indx, :]
     data = nc.Dataset(filename)
     labels = []
+
     for variable in data.variables:
         #print(variable + ":" + str(data[variable].shape))
         labels.append(variable)
     for i in range(0, 24):
-        labels.append('surr_emis_{:02d}'.format(i))
+        labels.append('anthro_surr_emis_{:02d}'.format(i))
+        labels.append('lightning_surr_emis_{:02d}'.format(i))
+    labels.append('total_lightning')
     data_dict = {label: [] for label in labels}
     extra_vars = ['xlon', 'xlat', 'hour', 'date', 'IC_FLASHCOUNT', 'CG_FLASHCOUNT', 'E_NO', 'U', 'V']
     #print('Variables require extra processing steps: {}'.format(extra_vars[:]))
@@ -47,28 +50,34 @@ def read_orig_file_from_wrf(filename):
     ntime = dims[0]-1
     ngrid = len(keep_indx)
     nvel = dims[2]
-    data_hours = da.array(data['hour'][1:])
+    data_hours = da.array(data['hour'][1:], dtype='float32')
     data_dict['hour'] = da.repeat(da.repeat(data_hours[:, :, np.newaxis], ngrid, axis=1), nvel, axis=2)
-    xlon = da.array(data['xlon'][:]).flatten()[np.newaxis, keep_indx, np.newaxis]
+    xlon = da.array(data['xlon'][:], dtype='float32').flatten()[np.newaxis, keep_indx, np.newaxis]
     data_dict['xlon'] = da.repeat(da.repeat(xlon, ntime, axis=0), nvel, axis=2)
-    xlat = da.array(data['xlat'][:]).flatten()[np.newaxis, keep_indx, np.newaxis]
+    xlat = da.array(data['xlat'][:], dtype='float32').flatten()[np.newaxis, keep_indx, np.newaxis]
     data_dict['xlat'] = da.repeat(da.repeat(xlat, ntime, axis=0), nvel, axis=2)
-    data_dict['date'] = da.zeros((ntime, ngrid, nvel)) + da.mean(data['date'][:])
+    data_dict['date'] = da.zeros((ntime, ngrid, nvel)) + da.mean(data['date'][:], dtype='float32')
     data_dict['date'] = data_dict['date']
-    cum_ic_flash = da.array(data['IC_FLASHCOUNT'][:])
-    cum_cg_flash = da.array(data['CG_FLASHCOUNT'][:])
-    data_dict['IC_FLASHCOUNT'] = da.repeat(cum_ic_flash[1:, keep_indx, :]-cum_ic_flash[:-1, keep_indx, :], nvel, axis=2)
-    data_dict['CG_FLASHCOUNT'] = da.repeat(cum_cg_flash[1:, keep_indx, :]-cum_cg_flash[:-1, keep_indx, :], nvel, axis=2)
-    e_no_lower = da.array(data['E_NO'])[1:, :, :]
-    e_no_upper = da.zeros((ntime, e_no_lower.shape[1], nvel - e_no_lower.shape[2]))
+    cum_ic_flash = da.array(data['IC_FLASHCOUNT'][:], dtype='float32')
+    cum_cg_flash = da.array(data['CG_FLASHCOUNT'][:], dtype='float32')
+    ic_flash = da.repeat(cum_ic_flash[1:, :, :]-cum_ic_flash[:-1, :, :], nvel, axis=2)
+    cg_flash = da.repeat(cum_cg_flash[1:, :, :]-cum_cg_flash[:-1, :, :], nvel, axis=2)
+    e_lightning = ic_flash + cg_flash
+    data_dict['IC_FLASHCOUNT'] = ic_flash[:, keep_indx, :]
+    data_dict['CG_FLASHCOUNT'] = cg_flash[:, keep_indx, :]
+    data_dict['total_lightning'] = e_lightning[:, keep_indx, :]
+    e_no_lower = da.array(data['E_NO'], dtype='float32')[1:, :, :]
+    e_no_upper = da.zeros((ntime, e_no_lower.shape[1], nvel - e_no_lower.shape[2]), dtype='float32')
     e_no = da.concatenate([e_no_lower, e_no_upper], axis=2)
     data_dict['E_NO'] = e_no[:, keep_indx, :]
     for i in range(0, 24):
-        this_label = 'surr_emis_{:02d}'.format(i)
+        this_label = 'anthro_surr_emis_{:02d}'.format(i)
         surr_indx = surr_arr[:, i]
         data_dict[this_label] = e_no[:, surr_indx, :]
-    stg_u = da.array(data['U'])
-    stg_v = da.array(data['V'])
+        this_label = 'lightning_surr_emis_{:02d}'.format(i)
+        data_dict[this_label] = e_lightning[:, surr_indx, :]
+    stg_u = da.array(data['U'], dtype='float32')
+    stg_v = da.array(data['V'], dtype='float32')
     u_indx_left, u_indx_right, v_indx_bot, v_indx_up = find_indx_for_wind()
     wind_u = (stg_u[1:, u_indx_left, :] + stg_u[1:, u_indx_right, :])/2
     data_dict['U'] = wind_u[:, keep_indx, :]
@@ -78,23 +87,23 @@ def read_orig_file_from_wrf(filename):
     match_vars = ['no2', 'pres', 'temp', 'CLDFRA']
     #print('Variables read directly from wrf: {}'.format(match_vars[:]))
     for var in match_vars:
-        data_dict[var] = da.array(data[var])[1:, keep_indx, :]
+        data_dict[var] = da.array(data[var], dtype='float32')[1:, keep_indx, :]
 
     reduce_dim_vars = ['elev', 'W']
     #print('Variables average vertically: {}'.format(reduce_dim_vars[:]))
     for var in reduce_dim_vars:
-        this_value = da.array(data[var])[1:, keep_indx, :]
+        this_value = da.array(data[var], dtype='float32')[1:, keep_indx, :]
         data_dict[var] = (this_value[:, :, 1:] + this_value[:, :, :-1])/2
 
     add_dim_vars = ['COSZEN', 'PBLH', 'LAI', 'HGT', 'SWDOWN', 'GLW']
     #print('Variables add vertical layers: {}'.format(add_dim_vars[:]))
 
     for var in add_dim_vars:
-        this_value = da.array(data[var])[1:, keep_indx, :]
+        this_value = da.array(data[var], dtype='float32')[1:, keep_indx, :]
         data_dict[var] = da.repeat(this_value, nvel, axis=2)
 
     #print('Key of dict:{}'.format(data_dict.keys()))
-    additional_features = ['xlon', 'xlat', 'date', 'elev', 'hour']
+    additional_features = ['xlon', 'xlat', 'date', 'elev', 'hour', 'IC_FLASHCOUNT', 'CG_FLASHCOUNT']
     y_label = ['no2']
     x_labels = [label for label in labels if label not in additional_features and label not in y_label]
     
@@ -204,6 +213,11 @@ def find_indx_for_wind():
     return u_indx_left, u_indx_right, v_indx_bot, v_indx_up
 
 
+def prescribed_lightning_distribution():
+    height = np.arange(0, 17)
+    lightning_dis = [0.015, 0.235, 0.32, 0.0505, 0.065, 0.0575, 0.044, 0.0465, 0.057,
+                     0.0555, 0.035, 0.0115, 0.0045, 0.003, 0, 0, 0]
+
 def const_features_for_single_grid_single_file(grid_indx, wind_grid_indx, data):
     client = Client()
     dims = data['no2'].shape
@@ -270,6 +284,9 @@ def const_features_for_single_grid(i_indx, j_indx):
     np.save('train', np.array(train_arr))
 
 
+if __name__=='__main__':
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus*')))
+    additional_arr, x_arr, y_arr, x_labels, additional_features = read_orig_file_from_wrf(orig_filenames[0])
 
 
 
