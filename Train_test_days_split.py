@@ -10,7 +10,7 @@ import geopy.distance
 import csv
 import scipy.io
 
-orig_file_path = '/Volumes/share-wrf3/ML-WRF'
+orig_file_path = '/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF'
 
 
 def train_test_filename(orig_filenames):
@@ -36,22 +36,22 @@ def read_orig_file_from_wrf(filename):
     data = nc.Dataset(filename)
     labels = []
     for variable in data.variables:
-        print(variable + ":" + str(data[variable].shape))
+        #print(variable + ":" + str(data[variable].shape))
         labels.append(variable)
     for i in range(0, 24):
         labels.append('surr_emis_{:02d}'.format(i))
     data_dict = {label: [] for label in labels}
     extra_vars = ['xlon', 'xlat', 'hour', 'date', 'IC_FLASHCOUNT', 'CG_FLASHCOUNT', 'E_NO', 'U', 'V']
-    print('Variables require extra processing steps: {}'.format(extra_vars[:]))
+    #print('Variables require extra processing steps: {}'.format(extra_vars[:]))
     dims = data['no2'].shape
     ntime = dims[0]-1
     ngrid = len(keep_indx)
     nvel = dims[2]
     data_hours = da.array(data['hour'][1:])
     data_dict['hour'] = da.repeat(da.repeat(data_hours[:, :, np.newaxis], ngrid, axis=1), nvel, axis=2)
-    xlon = da.array(data['xlon'][:]).flatten()[np.newaxis, :, np.newaxis]
+    xlon = da.array(data['xlon'][:]).flatten()[np.newaxis, keep_indx, np.newaxis]
     data_dict['xlon'] = da.repeat(da.repeat(xlon, ntime, axis=0), nvel, axis=2)
-    xlat = da.array(data['xlat'][:]).flatten()[np.newaxis, :, np.newaxis]
+    xlat = da.array(data['xlat'][:]).flatten()[np.newaxis, keep_indx, np.newaxis]
     data_dict['xlat'] = da.repeat(da.repeat(xlat, ntime, axis=0), nvel, axis=2)
     data_dict['date'] = da.zeros((ntime, ngrid, nvel)) + da.mean(data['date'][:])
     data_dict['date'] = data_dict['date']
@@ -76,30 +76,41 @@ def read_orig_file_from_wrf(filename):
     data_dict['V'] = wind_v[:, keep_indx, :]
 
     match_vars = ['no2', 'pres', 'temp', 'CLDFRA']
-    print('Variables read directly from wrf: {}'.format(match_vars[:]))
+    #print('Variables read directly from wrf: {}'.format(match_vars[:]))
     for var in match_vars:
         data_dict[var] = da.array(data[var])[1:, keep_indx, :]
 
     reduce_dim_vars = ['elev', 'W']
-    print('Variables average vertically: {}'.format(reduce_dim_vars[:]))
+    #print('Variables average vertically: {}'.format(reduce_dim_vars[:]))
     for var in reduce_dim_vars:
         this_value = da.array(data[var])[1:, keep_indx, :]
         data_dict[var] = (this_value[:, :, 1:] + this_value[:, :, :-1])/2
 
     add_dim_vars = ['COSZEN', 'PBLH', 'LAI', 'HGT', 'SWDOWN', 'GLW']
-    print('Variables add vertical layers: {}'.format(add_dim_vars[:]))
+    #print('Variables add vertical layers: {}'.format(add_dim_vars[:]))
 
     for var in add_dim_vars:
         this_value = da.array(data[var])[1:, keep_indx, :]
         data_dict[var] = da.repeat(this_value, nvel, axis=2)
 
-    print('Key of dict:{}'.format(data_dict.keys()))
-    save_arr = []
+    #print('Key of dict:{}'.format(data_dict.keys()))
+    additional_features = ['xlon', 'xlat', 'date', 'elev', 'hour']
+    y_label = ['no2']
+    x_labels = [label for label in labels if label not in additional_features and label not in y_label]
+    
+    additional_arr = []
+    x_arr = []
+    y_arr = []
     for var in labels:
-        print('Reading this variable:{}'.format(var))
+        #print('Reading this variable:{}'.format(var))
         this_value = data_dict[var].flatten()
-        save_arr.append(this_value)
-    return save_arr
+        if var in additional_features:
+            additional_arr.append(this_value)
+        elif var in x_labels:
+            x_arr.append(this_value)
+        elif var in y_label:
+            y_arr.append(this_value)
+    return additional_arr, x_arr, y_arr, x_labels, additional_features
 
 
 def create_index_list_for_target_cells():
@@ -185,7 +196,6 @@ def find_indx_for_wind():
     v_indx_up = []
     v_indx_bot = []
     for j_indx in range(grids[0]):
-        print('Make surrouding cells for cell lat {}'.format(j_indx))
         for i_indx in range(grids[1]):
             u_indx_right.append(406*j_indx+i_indx+1)
             u_indx_left.append(406*j_indx+i_indx)
@@ -261,12 +271,6 @@ def const_features_for_single_grid(i_indx, j_indx):
 
 
 
-if __name__== '__main__':
-    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus*')))
-    train_filenames, test_filenames = train_test_filename(orig_filenames)
-    read_orig_file_from_wrf(train_filenames[0])
-    create_index_dict_for_surrouding_emis()
-    create_index_list_for_target_cells()
 
 
 
