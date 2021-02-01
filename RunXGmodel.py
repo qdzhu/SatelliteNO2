@@ -1,10 +1,25 @@
 from Train_test_days_split import *
 import time
 import xgboost as xgb
+from dask.distributed import Client
+from dask_jobqueue import SLURMCluster
+
+
+def get_slurm_dask_client(n_workers):
+    cluster = SLURMCluster(cores=24,
+                           memory='128GB',
+                           project="co_aiolos",
+                           walltime="24:00:00",
+                           queue="savio2_bigmem")
+
+    cluster.scale(n_workers)
+    client = Client(cluster)
+    return client
 
 def make_train_matrix(client):
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
+    train_filenames = train_filenames[0:1]
     x_total = []
     y_total = []
     add_total = []
@@ -39,6 +54,7 @@ def make_xgboost_model(client, dtrain):
     bst.dump_model('dump.raw.txt', 'featmap.txt')
 
 if __name__=='__main__':
-    client = Client()
+    client = get_slurm_dask_client(5)
+
     dtrain = make_train_matrix(client)
     make_xgboost_model(client, dtrain)
