@@ -1,4 +1,5 @@
 from Train_test_days_split import *
+from Utils import *
 import time
 import xgboost as xgb
 from dask.distributed import Client
@@ -30,12 +31,12 @@ def make_train_matrix(client):
         add_total.append(additional_arr)
         x_total.append(x_arr)
         y_total.append(y_arr)
-    print("--- {} minutes ---".format((time.time() - starttime) / 60))
+    print("--- {:.1f} minutes to read the data ---".format((time.time() - starttime) / 60))
     starttime = time.time()
     X = da.concatenate(x_total, axis=0).rechunk((62, 100))
     y = da.concatenate(y_total, axis=0).rechunk((1, 100))
     dtrain = xgb.dask.DaskDMatrix(client, X, y)
-    print("--- {} minutes ---".format((time.time() - starttime) / 60))
+    print("--- {:.1f} minutes to concatenate the data---".format((time.time() - starttime) / 60))
     return dtrain
 
 def make_xgboost_model(client, dtrain):
@@ -54,7 +55,6 @@ def make_xgboost_model(client, dtrain):
     bst.dump_model('dump.raw.txt', 'featmap.txt')
 
 if __name__=='__main__':
-    client = get_slurm_dask_client(5)
-
+    client = get_slurm_dask_client_savio3(2)
     dtrain = make_train_matrix(client)
     make_xgboost_model(client, dtrain)

@@ -10,8 +10,8 @@ import geopy.distance
 import csv
 import scipy.io
 
-#orig_file_path = '/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF'
-orig_file_path = '/Volumes/share-wrf3/ML-WRF/'
+orig_file_path = '/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF'
+#orig_file_path = '/Volumes/share-wrf3/ML-WRF/'
 
 def train_test_filename(orig_filenames):
     """
