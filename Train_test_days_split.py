@@ -116,9 +116,9 @@ def read_orig_file_from_wrf(filename):
         if var in additional_features:
             additional_arr.append(this_value)
         elif var in x_labels:
-            x_arr.append(this_value)
+            x_arr.append(this_value.compute())
         elif var in y_label:
-            y_arr.append(this_value)
+            y_arr.append(this_value.compute())
     return additional_arr, x_arr, y_arr, x_labels, additional_features
 
 

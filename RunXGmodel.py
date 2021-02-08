@@ -55,6 +55,8 @@ def make_xgboost_model(client, dtrain):
     bst.dump_model('dump.raw.txt', 'featmap.txt')
 
 if __name__=='__main__':
-    client = get_slurm_dask_client_savio3(2)
+    client = Client()
     dtrain = make_train_matrix(client)
+    client = get_slurm_dask_client_savio3(2)
+
     make_xgboost_model(client, dtrain)
