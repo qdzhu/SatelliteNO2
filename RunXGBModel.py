@@ -154,13 +154,13 @@ def make_xgbmodel(client, filename):
     del wind_feature
     del anthroemis_future
     del lightning_future
-    chunksize = int(X.shape[0] / 10)
+    chunksize = int(X.shape[0] / 50)
     X = X.rechunk(chunks=(chunksize, 62))
     y = y.rechunk(chunks=(chunksize, 1))
     print('Start making training datasets')
     dtrain = xgb.dask.DaskDMatrix(client, X, y)
     print('Start running xgboost model')
-    bst = xgb.dask.train(client,
+    output = xgb.dask.train(client,
                             {'verbosity': 2,
                              'tree_method': 'hist',
                              'objective': 'reg:squarederror',
@@ -169,10 +169,13 @@ def make_xgbmodel(client, filename):
                              },
                             dtrain,
                             num_boost_round=4, evals=[(dtrain, 'train')])
-    config = bst.save_config()
-    print(config)
-    bst.save_model('2005.model')
-    bst.dump_model('dump.raw.txt', 'featmap.txt')
+    print('Training is complete')
+    bst = output['booster']
+    hist = output['history']
+    print(hist)
+#    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005.model')
+    print('Saving model')
+    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt', '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
 
 if __name__=='__main__':
     client = get_slurm_dask_client_savio2(5)
