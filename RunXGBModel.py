@@ -37,7 +37,7 @@ def get_slurm_dask_client_savio2(n_nodes):
     cluster = SLURMCluster(cores=12,
                            memory='64GB',
                            project="co_aiolos",
-                           walltime="12:00:00",
+                           walltime="24:00:00",
                            queue="savio",
                            local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
                            job_extra=['--qos="aiolos_savio_normal"'])
@@ -68,20 +68,27 @@ for row in reader:
     surr_arr.append(this_arr)
 surr_arr = np.array(surr_arr)[keep_indx, :]
 
+
 def read_var_from_file_xr(filename, varname):
     ds = xr.open_mfdataset(filename, parallel=True)
     this_var = da.array(ds[varname][1:, keep_indx, :]).flatten()
+    del ds
     return this_var
+
 
 def read_var_from_file_nc(filename, varname):
     ds = nc.Dataset(filename)
     this_var = da.array(ds[varname][1:, keep_indx, :]).flatten()
+    del ds
     return this_var
+
 
 def read_2d_var_from_file_xr(filename, varname):
     ds = xr.open_mfdataset(filename, parallel=True)
     this_var = da.repeat(da.array(ds[varname][1:, keep_indx, :]),nvel,axis=2).flatten()
+    del ds
     return this_var
+
 
 def read_wind_from_file_xr(filename):
     ds = xr.open_mfdataset(filename, parallel=True)
@@ -96,6 +103,7 @@ def read_wind_from_file_xr(filename):
     w = (stg_w[:, :, 1:] + stg_w[:, :, :-1])/2
     w = w.flatten()
     return da.stack([u,v,w])
+
 
 def read_lightning_from_file_xr(filename):
     ds = xr.open_mfdataset(filename, parallel=True)
@@ -112,6 +120,7 @@ def read_lightning_from_file_xr(filename):
         surrs.append(e_lightning[:, surr_indx, :].flatten())
     return da.stack(surrs)
 
+
 def read_anthro_emis_from_file_xr(filename):
     ds = xr.open_mfdataset(filename, parallel=True)
     e_no_lower = da.array(ds['E_NO'])[1:, :, :]
@@ -124,6 +133,7 @@ def read_anthro_emis_from_file_xr(filename):
         e_no_total.append(e_no[:, surr_indx, :].flatten())
     return da.stack(e_no_total)
 
+
 def make_xgbmodel(client, filename):
     varnames = ['no2', 'pres', 'temp', 'CLDFRA']
     futures = []
@@ -131,53 +141,67 @@ def make_xgbmodel(client, filename):
         future = client.submit(read_var_from_file_xr, filename, varname)
         futures.append(future)
     dirt_feature = da.stack([future.result() for future in futures])
+    client.cancel(futures)
     varnames_2d = ['COSZEN', 'PBLH', 'LAI', 'HGT', 'SWDOWN', 'GLW']
     futures_2d = []
     for varname in varnames_2d:
         future_2d = client.submit(read_2d_var_from_file_xr, filename, varname)
         futures_2d.append(future_2d)
     dirt2d_feature = da.stack([future.result() for future in futures_2d])
+    client.cancel(futures_2d)
     wind_feature = client.submit(read_wind_from_file_xr, filename)
     anthroemis_future = client.submit(read_anthro_emis_from_file_xr, filename)
     lightning_future = client.submit(read_lightning_from_file_xr, filename)
-    datasets = da.transpose(da.concatenate(
-        (dirt_feature, dirt2d_feature, wind_feature.result(), anthroemis_future.result(), lightning_future.result()),
-        axis=0))
-    X = datasets[:, 1:]
-    y = datasets[:, 0]
-    X, y = dask.persist(X, y)
-    del datasets
-    for future in futures:
-        del future
-    for future in futures_2d:
-        del future
+    datasets = da.transpose(da.concatenate((dirt_feature, dirt2d_feature, wind_feature.result(), anthroemis_future.result(), lightning_future.result()),axis=0))
+    client.cancel(dirt_feature)
+    client.cancel(dirt2d_feature)
     del wind_feature
     del anthroemis_future
     del lightning_future
-    chunksize = int(X.shape[0] / 10)
+    datasets_future = client.scatter(datasets)
+    return datasets_future
+
+def make_xgbmodel_final(client, train_filenames):
+    create_total = True
+    for train_filename in train_filenames:
+        print('Reading training data {}'.format(train_filename))
+        this_dataset = make_xgbmodel(client, train_filename)
+        if create_total:
+            total_datasets = this_dataset.result()
+            create_total = False
+        else:
+            total_datasets = da.concatenate((total_datasets, this_dataset.result()), axis=0)
+        del this_dataset
+    X = total_datasets[:, 1:]
+    y = total_datasets[:, 0]
+    chunksize = int(X.shape[0]/len(client.nthreads())/3)
     X = X.rechunk(chunks=(chunksize, 62))
     y = y.rechunk(chunks=(chunksize, 1))
+    X, y = client.persist([X, y])
     print('Start making training datasets')
     dtrain = xgb.dask.DaskDMatrix(client, X, y)
     print('Start running xgboost model')
-    bst = xgb.dask.train(client,
-                            {'verbosity': 2,
+    output = xgb.dask.train(client,
+                            {'verbosity': 1,
                              'tree_method': 'hist',
                              'objective': 'reg:squarederror',
-                             'subsample': 0.1,
                              'sampling_method': 'gradient_based'
                              },
                             dtrain,
-                            num_boost_round=4, evals=[(dtrain, 'train')])
-    config = bst.save_config()
-    print(config)
-    bst.save_model('2005.model')
-    bst.dump_model('dump.raw.txt', 'featmap.txt')
+                            num_boost_round=50, early_stopping_rounds=5, evals=[(dtrain, 'train')])
+    print('Training is complete')
+    bst = output['booster']
+    hist = output['history']
+    print(hist)
+    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005.model')
+    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
+                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
+    exit(0)
+
 
 if __name__=='__main__':
-    client = get_slurm_dask_client_savio2(5)
-    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus*')))
-    orig_filenames = orig_filenames[0:5]
+    client = get_slurm_dask_client_savio2(10)
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
     filename = train_filenames[0]
-    make_xgbmodel(client, filename)
+    make_xgbmodel_final(client, train_filenames)
