@@ -183,7 +183,7 @@ def make_xgbmodel_final(client, train_filenames):
     print('Start running xgboost model')
     output = xgb.dask.train(client,
                             {'verbosity': 1,
-                             'tree_method': 'hist',
+                            'tree_method': 'hist',
                              'objective': 'reg:squarederror',
                              'sampling_method': 'gradient_based'
                              },
@@ -197,7 +197,6 @@ def make_xgbmodel_final(client, train_filenames):
     bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
                    '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
     exit(0)
-
 
 if __name__=='__main__':
     client = get_slurm_dask_client_savio2(10)
