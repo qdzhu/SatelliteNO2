@@ -1,0 +1,32 @@
+#!/bin/bash
+# Job Name:
+#SBATCH --job-name=xgb
+#
+# Partition:
+#SBATCH --partition=savio3
+#
+# Account:
+#SBATCH --account=co_aiolos
+#
+# QoS:
+#SBATCH --qos=aiolos_savio3_normal
+#
+# Resources to use:
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=32
+#
+# Wall clock limit:
+#SBATCH --time=72:00:00
+#
+#SBATCH --requeue
+#
+# Email me for anything
+#SBATCH --mail-user=qindan_zhu@berkeley.edu
+#SBATCH --mail-type=all
+#
+## Run command
+# Get how many days we should run for 
+#mydir=$(cd `dirname $0`; pwd -P) # causes some weird issue during submission where it references /var/spool/slurmd/jobN
+source venv/bin/activate
+python -m RunXGBModel
+exit 0

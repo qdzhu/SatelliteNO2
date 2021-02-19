@@ -27,7 +27,8 @@ def get_slurm_dask_client_bigmem(n_nodes):
                            project="co_aiolos",
                            walltime="02:00:00",
                            queue="savio2_bigmem",
-                           job_extra=['--qos="savio_lowprio"'])
+                           local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
+                            job_extra=['--qos="savio_lowprio"'])
 
     cluster.scale(n_nodes*4)
     client = Client(cluster)
@@ -42,7 +43,7 @@ def get_slurm_dask_client_savio2(n_nodes):
                            local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
                            job_extra=['--qos="aiolos_savio_normal"'])
 
-    cluster.scale(n_nodes*6)
+    cluster.scale(n_nodes*4)
     client = Client(cluster)
     return client
 def get_slurm_dask_client_savio3(n_nodes):
@@ -51,9 +52,10 @@ def get_slurm_dask_client_savio3(n_nodes):
                            project="co_aiolos",
                            walltime="72:00:00",
                            queue="savio3",
+                           local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
                            job_extra=['--qos="aiolos_savio3_normal"'])
 
-    cluster.scale(n_nodes*16)
+    cluster.scale(n_nodes*8)
     client = Client(cluster)
     return client
 
@@ -199,8 +201,11 @@ def make_xgbmodel_final(client, train_filenames):
     exit(0)
 
 if __name__=='__main__':
-    client = get_slurm_dask_client_savio2(10)
+#    client = get_slurm_dask_client_bigmem(8)
+#    client = get_slurm_dask_client_savio2(12)
+    client = get_slurm_dask_client_savio3(10)
+    client.wait_for_workers(80)
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
-    filename = train_filenames[0]
+    train_filenames = train_filenames[0:20]
     make_xgbmodel_final(client, train_filenames)
