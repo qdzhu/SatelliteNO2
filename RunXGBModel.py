@@ -176,7 +176,7 @@ def make_xgbmodel_final(client, train_filenames):
         del this_dataset
     X = total_datasets[:, 1:]
     y = total_datasets[:, 0]
-    chunksize = int(X.shape[0]/len(client.nthreads())/3)
+    chunksize = int(X.shape[0]/len(client.nthreads())/2)
     X = X.rechunk(chunks=(chunksize, 62))
     y = y.rechunk(chunks=(chunksize, 1))
     X, y = client.persist([X, y])
@@ -186,8 +186,7 @@ def make_xgbmodel_final(client, train_filenames):
     output = xgb.dask.train(client,
                             {'verbosity': 1,
                             'tree_method': 'hist',
-                             'objective': 'reg:squarederror',
-                             'sampling_method': 'gradient_based'
+                             'objective': 'reg:squarederror'
                              },
                             dtrain,
                             num_boost_round=50, early_stopping_rounds=5, evals=[(dtrain, 'train')])
@@ -198,7 +197,14 @@ def make_xgbmodel_final(client, train_filenames):
     bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005.model')
     bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
                    '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
-    exit(0)
+    client.cancel(X)
+    client.cancel(y)
+    dtrain.del()
+    return bst
+
+
+
+
 
 if __name__=='__main__':
 #    client = get_slurm_dask_client_bigmem(8)
