@@ -194,9 +194,9 @@ def make_xgbmodel_final(client, train_filenames):
     bst = output['booster']
     hist = output['history']
     print(hist)
-    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005.model')
-    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
-                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
+    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005_prev.model')
+#    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
+#                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
     client.cancel(X)
     client.cancel(y)
     del dtrain
@@ -248,8 +248,8 @@ def make_xgbmodel_final_update(client, train_filenames, prev_bst):
 if __name__=='__main__':
 #    client = get_slurm_dask_client_bigmem(8)
 #    client = get_slurm_dask_client_savio2(12)
-    client = get_slurm_dask_client_savio3(10)
-    client.wait_for_workers(80)
+    client = get_slurm_dask_client_savio3(4)
+    client.wait_for_workers(32)
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
     #train_filenames = train_filenames[0:1]
