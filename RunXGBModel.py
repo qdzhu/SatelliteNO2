@@ -194,7 +194,7 @@ def make_xgbmodel_final(client, train_filenames):
     bst = output['booster']
     hist = output['history']
     print(hist)
-    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005_prev.model')
+    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_00.model')
 #    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
 #                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
     client.cancel(X)
@@ -202,7 +202,7 @@ def make_xgbmodel_final(client, train_filenames):
     del dtrain
     return bst
 
-def make_xgbmodel_final_update(client, train_filenames, prev_bst):
+def make_xgbmodel_final_update(client, train_filenames, prev_bst, i_te):
     create_total = True
     for train_filename in train_filenames:
         print('Reading training data {}'.format(train_filename))
@@ -227,7 +227,8 @@ def make_xgbmodel_final_update(client, train_filenames, prev_bst):
                             'tree_method': 'hist',
                              'objective': 'reg:squarederror',
                              'process_type': 'update',
-                             'updater': 'refresh'
+                             'updater': 'refresh',
+                             'refresh_leaf': True
                              },
                             dtrain,
                             num_boost_round=50, early_stopping_rounds=5, evals=[(dtrain, 'train')], xgb_model=prev_bst)
@@ -235,7 +236,8 @@ def make_xgbmodel_final_update(client, train_filenames, prev_bst):
     bst = output['booster']
     hist = output['history']
     print(hist)
-    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/2005_update.model')
+    save_name = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{:2d}.model'.format(i_te)
+    bst.save_model(save_name)
     client.cancel(X)
     client.cancel(y)
     del dtrain
@@ -252,6 +254,6 @@ if __name__=='__main__':
     client.wait_for_workers(32)
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
-    #train_filenames = train_filenames[0:1]
     bst = make_xgbmodel_final(client, train_filenames[0:2])
-    bst = make_xgbmodel_final_update(client, train_filenames[2:4], bst)
+    for i in range(2, len(train_filenames), 2):
+        bst = make_xgbmodel_final_update(client, train_filenames[i:i+2], bst, i)
