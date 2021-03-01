@@ -189,7 +189,7 @@ def make_xgbmodel_final(client, train_filenames):
                              'objective': 'reg:squarederror'
                              },
                             dtrain,
-                            num_boost_round=50, early_stopping_rounds=5, evals=[(dtrain, 'train')])
+                            num_boost_round=2, early_stopping_rounds=5, evals=[(dtrain, 'train')])
     print('Training is complete')
     bst = output['booster']
     hist = output['history']
@@ -224,19 +224,17 @@ def make_xgbmodel_final_update(client, train_filenames, prev_bst, i_te):
     dtrain = xgb.dask.DaskDMatrix(client, X, y)
     print('Start running xgboost model')
     output = xgb.dask.train(client,
-                            {'verbosity': 1,
+                            {'verbosity': 0,
                             'tree_method': 'hist',
-                             'objective': 'reg:squarederror',
-                             'process_type': 'update',
-                             'updater': 'refresh',
-                             'refresh_leaf': True
+                             'objective': 'reg:squarederror'
                              },
                             dtrain,
-                            num_boost_round=50, early_stopping_rounds=5, evals=[(dtrain, 'train')], xgb_model=prev_bst)
+                            num_boost_round=2, early_stopping_rounds=5, evals=[(dtrain, 'train')], xgb_model=prev_bst)
     print('Training is complete')
     bst = output['booster']
-    hist = output['history']
-    print(hist)
+    print('Number of trees',len(bst.get_dump()))
+    #hist = output['history']
+    #print(hist)
     save_name = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{:2d}.model'.format(i_te)
     bst.save_model(save_name)
     client.cancel(X)
