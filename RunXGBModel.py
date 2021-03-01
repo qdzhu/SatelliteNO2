@@ -199,6 +199,7 @@ def make_xgbmodel_final(client, train_filenames):
 #                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
     client.cancel(X)
     client.cancel(y)
+    client.cancel(total_datasets)
     del dtrain
     return bst
 
@@ -240,6 +241,7 @@ def make_xgbmodel_final_update(client, train_filenames, prev_bst, i_te):
     bst.save_model(save_name)
     client.cancel(X)
     client.cancel(y)
+    client.cancel(total_datasets)
     del dtrain
     return bst
 
@@ -255,5 +257,9 @@ if __name__=='__main__':
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
     bst = make_xgbmodel_final(client, train_filenames[0:2])
+    print('Restart the client')
+    client.restart()
     for i in range(2, len(train_filenames), 2):
         bst = make_xgbmodel_final_update(client, train_filenames[i:i+2], bst, i)
+        print('Restart the client')
+        client.restart()
