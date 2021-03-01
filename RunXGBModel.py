@@ -201,9 +201,8 @@ def make_xgbmodel_final(client, train_filenames):
     client.cancel(y)
     client.cancel(total_datasets)
     del dtrain
-    return bst
 
-def make_xgbmodel_final_update(client, train_filenames, prev_bst, i_te):
+def make_xgbmodel_final_update(client, train_filenames, i_te):
     create_total = True
     for train_filename in train_filenames:
         print('Reading training data {}'.format(train_filename))
@@ -220,44 +219,56 @@ def make_xgbmodel_final_update(client, train_filenames, prev_bst, i_te):
     X = X.rechunk(chunks=(chunksize, 62))
     y = y.rechunk(chunks=(chunksize, 1))
     X, y = client.persist([X, y])
-    print('Start making training datasets')
+    print('Start making training datasets at step:{}'.format(str(i_te).zfill(2)))
     dtrain = xgb.dask.DaskDMatrix(client, X, y)
     print('Start running xgboost model')
+    prev_bst = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{}.model'.format(str(i_te-1).zfill(2))
     output = xgb.dask.train(client,
                             {'verbosity': 0,
                             'tree_method': 'hist',
                              'objective': 'reg:squarederror'
                              },
                             dtrain,
-                            num_boost_round=2, early_stopping_rounds=5, evals=[(dtrain, 'train')], xgb_model=prev_bst)
+                            num_boost_round=2, evals=[(dtrain, 'train')], xgb_model=prev_bst)
     print('Training is complete')
     bst = output['booster']
-    print('Number of trees',len(bst.get_dump()))
+    print('Number of trees', len(bst.get_dump()))
     #hist = output['history']
     #print(hist)
-    save_name = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{:2d}.model'.format(i_te)
+    save_name = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{}.model'.format(str(i_te).zfill(2))
     bst.save_model(save_name)
     client.cancel(X)
     client.cancel(y)
     client.cancel(total_datasets)
     del dtrain
-    return bst
 
-
-
+def xgbmodel_training_continuous():
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
+    train_filenames, test_filenames = train_test_filename(orig_filenames)
+    for i in range(2, len(train_filenames), 2):
+        client = get_slurm_dask_client_savio3(4)
+        client.wait_for_workers(32)
+        if i == 0:
+            make_xgbmodel_final(client, train_filenames[i:i+2])
+        else:
+            make_xgbmodel_final_update(client, train_filenames[i:i + 2], i)
+        print('shutdown the client and wait for restart')
+        client.shutdown()
 
 
 if __name__=='__main__':
+    xgbmodel_training_continuous()
 #    client = get_slurm_dask_client_bigmem(8)
 #    client = get_slurm_dask_client_savio2(12)
-    client = get_slurm_dask_client_savio3(4)
-    client.wait_for_workers(32)
-    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
-    train_filenames, test_filenames = train_test_filename(orig_filenames)
-    bst = make_xgbmodel_final(client, train_filenames[0:2])
-    print('Restart the client')
-    client.restart()
-    for i in range(2, len(train_filenames), 2):
-        bst = make_xgbmodel_final_update(client, train_filenames[i:i+2], bst, i)
+    if False:
+        client = get_slurm_dask_client_savio3(4)
+        client.wait_for_workers(32)
+        orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
+        train_filenames, test_filenames = train_test_filename(orig_filenames)
+        bst = make_xgbmodel_final(client, train_filenames[0:2])
         print('Restart the client')
         client.restart()
+        for i in range(2, len(train_filenames), 2):
+            bst = make_xgbmodel_final_update(client, train_filenames[i:i+2], bst, i)
+            print('Restart the client')
+            client.restart()
