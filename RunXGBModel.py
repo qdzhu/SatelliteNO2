@@ -177,6 +177,7 @@ def make_xgbmodel_final(client, train_filenames):
     X = total_datasets[:, 1:]
     y = total_datasets[:, 0]
     chunksize = int(X.shape[0]/len(client.nthreads())/2)
+    #chunksize = int(X.shape[0]/1000)
     X = X.rechunk(chunks=(chunksize, 62))
     y = y.rechunk(chunks=(chunksize, 1))
     X, y = client.persist([X, y])
@@ -197,10 +198,11 @@ def make_xgbmodel_final(client, train_filenames):
     bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_00.model')
 #    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
 #                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
+    
     client.cancel(X)
     client.cancel(y)
     client.cancel(total_datasets)
-    del dtrain
+    #del dtrain
 
 def make_xgbmodel_final_update(client, train_filenames, i_te):
     create_total = True
@@ -215,6 +217,7 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
         del this_dataset
     X = total_datasets[:, 1:]
     y = total_datasets[:, 0]
+    #chunksize = int(X.shape[0]/32)
     chunksize = int(X.shape[0]/len(client.nthreads())/2)
     X = X.rechunk(chunks=(chunksize, 62))
     y = y.rechunk(chunks=(chunksize, 1))
@@ -222,9 +225,9 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
     print('Start making training datasets at step:{}'.format(str(i_te).zfill(2)))
     dtrain = xgb.dask.DaskDMatrix(client, X, y)
     print('Start running xgboost model')
-    prev_bst = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{}.model'.format(str(i_te-1).zfill(2))
+    prev_bst = '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_{}.model'.format(str(i_te-2).zfill(2))
     output = xgb.dask.train(client,
-                            {'verbosity': 0,
+                            {'verbosity': 1,
                             'tree_method': 'hist',
                              'objective': 'reg:squarederror'
                              },
@@ -245,9 +248,10 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
 def xgbmodel_training_continuous():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
-    for i in range(2, len(train_filenames), 2):
+    for i in range(0, len(train_filenames), 2):
         client = get_slurm_dask_client_savio3(4)
         client.wait_for_workers(32)
+        print('Start making training datasets at step:{}'.format(str(i).zfill(2)))
         if i == 0:
             make_xgbmodel_final(client, train_filenames[i:i+2])
         else:
