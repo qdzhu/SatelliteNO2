@@ -3,6 +3,9 @@ import xgboost as xgb
 from Train_test_days_split import *
 import xarray as xr
 import time
+import dask.dataframe as dd
+from dask.utils import tmpfile
+from sqlalchemy import create_engine
 
 dask.config.set(temporary_directory='/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2')
 
@@ -38,7 +41,7 @@ def get_slurm_dask_client_savio2(n_nodes):
     cluster = SLURMCluster(cores=12,
                            memory='64GB',
                            project="co_aiolos",
-                           walltime="24:00:00",
+                           walltime="10:00:00",
                            queue="savio",
                            local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
                            job_extra=['--qos="aiolos_savio_normal"'])
@@ -232,7 +235,7 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
                              'objective': 'reg:squarederror'
                              },
                             dtrain,
-                            num_boost_round=2, evals=[(dtrain, 'train')], xgb_model=prev_bst)
+                            num_boost_round=5, evals=[(dtrain, 'train')], xgb_model=prev_bst)
     print('Training is complete')
     bst = output['booster']
     print('Number of trees', len(bst.get_dump()))
@@ -246,21 +249,45 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
     del dtrain
 
 def xgbmodel_training_continuous():
-    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2005*')))
-    train_filenames, test_filenames = train_test_filename(orig_filenames)
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
+    #train_filenames, test_filenames = train_test_filename(orig_filenames)
+    train_filenames = orig_filenames
+    #client = get_slurm_dask_client_savio2(12)
+    #client = get_slurm_dask_client_bigmem(4)
+    #client.wait_for_workers(48)
     for i in range(0, len(train_filenames), 2):
-        client = get_slurm_dask_client_savio3(4)
-        client.wait_for_workers(32)
+        client = get_slurm_dask_client_savio2(10)
+        client.wait_for_workers(40)
         print('Start making training datasets at step:{}'.format(str(i).zfill(2)))
         if i == 0:
             make_xgbmodel_final(client, train_filenames[i:i+2])
         else:
             make_xgbmodel_final_update(client, train_filenames[i:i + 2], i)
         print('shutdown the client and wait for restart')
+        #client.restart()
         client.shutdown()
 
+def save_datasets_test():
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2007*')))
+    train_filenames, test_filenames = train_test_filename(orig_filenames)
+    client = get_slurm_dask_client_savio2(4)
+    client.wait_for_workers(16)
+    create_total = True
+    for train_filename in train_filenames[:1]:
+        print('Reading training data {}'.format(train_filename))
+        this_dataset = make_xgbmodel(client, train_filename)
+        if create_total:
+            total_datasets = this_dataset.result()
+            create_total = False
+        else:
+            total_datasets = da.concatenate((total_datasets, this_dataset.result()), axis=0)
+        del this_dataset 
+    df = dd.io.from_dask_array(total_datasets)
+    df_slice = df.loc[:1000000,:]
+    df_slice.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False, chunksize=1000000)     
 
 if __name__=='__main__':
+#    save_datasets_test()
     xgbmodel_training_continuous()
 #    client = get_slurm_dask_client_bigmem(8)
 #    client = get_slurm_dask_client_savio2(12)
