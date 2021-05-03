@@ -6,6 +6,8 @@ import time
 import dask.dataframe as dd
 from dask.utils import tmpfile
 from sqlalchemy import create_engine
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
 
 dask.config.set(temporary_directory='/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2')
 
@@ -267,6 +269,50 @@ def xgbmodel_training_continuous():
         #client.restart()
         client.shutdown()
 
+def xgbmodel_testing_continuous():
+    datapath = './Outputs-2012'
+    filenames_assemble = []
+    for i_te in range(0, 116, 2):
+        filename = 'model_{}.model'.format(str(i_te).zfill(2))
+        filenames_assemble.append(os.path.join(datapath, filename))
+
+    bst_assemble = []
+    for filename in filenames_assemble:
+        bst = xgb.Booster({'nthread': 4})
+        bst.load_model(filename)
+        bst_assemble.append(bst)
+
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2014*')))
+    # train_filenames, test_filenames = train_test_filename(orig_filenames)
+    test_filenames = orig_filenames
+    rmse_col = []
+    r2_col = []
+    for i in range(0, len(test_filenames), 2):
+        client = get_slurm_dask_client_savio2(10)
+        client.wait_for_workers(40)
+        this_test_dataset = make_xgbmodel(client, train_filenames[i:i + 2]).result()
+        X = this_test_dataset[:, 1:]
+        y = this_test_dataset[:, 0]
+        chunksize = int(X.shape[0] / len(client.nthreads()) / 2)
+        X = X.rechunk(chunks=(chunksize, 62))
+        y = y.rechunk(chunks=(chunksize, 1))
+        X, y = client.persist([X, y])
+        print('Start making testing datasets')
+        dtest = xgb.dask.DaskDMatrix(client, X, y)
+        this_rmse_col = []
+        this_r2_col = []
+        for i, bst in enumerate(bst_assemble):
+            print('model {}'.format(i))
+            prediction = xgb.dask.predict(client, bst, dtest)
+            this_rmse_col.append(mean_squared_error(y, prediction))
+            this_r2_col.append(r2_score(y, prediction))
+        rmse_col.append(np.array(this_rmse_col))
+        r2_col.append(np.array(this_r2_col))
+    np.save('./Outputs-2012/rmse_elv.npy', np.array(rmse_col))
+    np.save('./Outputs-2012/r2_elv.npy', np.array(r2_col))
+
+
+
 def save_datasets_test():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2007*')))
     train_filenames, test_filenames = train_test_filename(orig_filenames)
@@ -288,7 +334,8 @@ def save_datasets_test():
 
 if __name__=='__main__':
 #    save_datasets_test()
-    xgbmodel_training_continuous()
+    xgbmodel_testing_continuous()
+    #xgbmodel_training_continuous()
 #    client = get_slurm_dask_client_bigmem(8)
 #    client = get_slurm_dask_client_savio2(12)
     if False:
