@@ -250,6 +250,8 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
     client.cancel(total_datasets)
     del dtrain
 
+
+
 def xgbmodel_training_continuous():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
     #train_filenames, test_filenames = train_test_filename(orig_filenames)
@@ -269,6 +271,42 @@ def xgbmodel_training_continuous():
         #client.restart()
         client.shutdown()
 
+
+def make_xgbmodel_pred(client, test_filenames, bst_assemble):
+    create_total = True
+    for test_filename in test_filenames:
+        print('Reading training data {}'.format(test_filename))
+        this_dataset = make_xgbmodel(client, test_filename)
+        if create_total:
+            total_datasets = this_dataset.result()
+            create_total = False
+        else:
+            total_datasets = da.concatenate((total_datasets, this_dataset.result()), axis=0)
+        del this_dataset
+    X = total_datasets[:, 1:]
+    y = total_datasets[:, 0]
+    chunksize = int(X.shape[0] / len(client.nthreads()) / 2)
+    # chunksize = int(X.shape[0]/1000)
+    X = X.rechunk(chunks=(chunksize, 62))
+    y = y.rechunk(chunks=(chunksize, 1))
+    X, y = client.persist([X, y])
+    print('Start making training datasets')
+    dtest = xgb.dask.DaskDMatrix(client, X, y)
+    this_rmse_col = []
+    this_r2_col = []
+    for i, bst in enumerate(bst_assemble):
+        print('model {}'.format(i))
+        prediction = xgb.dask.predict(client, bst, dtest)
+        this_rmse_col.append(mean_squared_error(y, prediction))
+        this_r2_col.append(r2_score(y, prediction))
+
+    client.cancel(X)
+    client.cancel(y)
+    client.cancel(total_datasets)
+    return np.array(this_rmse_col, this_r2_col)
+    # del dtrain
+
+
 def xgbmodel_testing_continuous():
     datapath = './Outputs-2012'
     filenames_assemble = []
@@ -284,30 +322,19 @@ def xgbmodel_testing_continuous():
 
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2014*')))
     # train_filenames, test_filenames = train_test_filename(orig_filenames)
-    test_filenames = orig_filenames
+    test_filenames = orig_filenames[0:4]
     rmse_col = []
     r2_col = []
+
     for i in range(0, len(test_filenames), 2):
         client = get_slurm_dask_client_savio2(10)
         client.wait_for_workers(40)
-        this_test_dataset = make_xgbmodel(client, train_filenames[i:i + 2]).result()
-        X = this_test_dataset[:, 1:]
-        y = this_test_dataset[:, 0]
-        chunksize = int(X.shape[0] / len(client.nthreads()) / 2)
-        X = X.rechunk(chunks=(chunksize, 62))
-        y = y.rechunk(chunks=(chunksize, 1))
-        X, y = client.persist([X, y])
-        print('Start making testing datasets')
-        dtest = xgb.dask.DaskDMatrix(client, X, y)
-        this_rmse_col = []
-        this_r2_col = []
-        for i, bst in enumerate(bst_assemble):
-            print('model {}'.format(i))
-            prediction = xgb.dask.predict(client, bst, dtest)
-            this_rmse_col.append(mean_squared_error(y, prediction))
-            this_r2_col.append(r2_score(y, prediction))
+        this_rmse_col, this_r2_col = make_xgbmodel_pred(client, test_filenames[i:i + 2], bst_assemble)
         rmse_col.append(np.array(this_rmse_col))
         r2_col.append(np.array(this_r2_col))
+        print('shutdown the client and wait for restart')
+        #client.restart()
+        client.shutdown()
     np.save('./Outputs-2012/rmse_elv.npy', np.array(rmse_col))
     np.save('./Outputs-2012/r2_elv.npy', np.array(r2_col))
 
