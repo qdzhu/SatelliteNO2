@@ -195,7 +195,7 @@ def make_xgbmodel_final(client, train_filenames):
                              'objective': 'reg:squarederror'
                              },
                             dtrain,
-                            num_boost_round=2, early_stopping_rounds=5, evals=[(dtrain, 'train')])
+                            num_boost_round=50, early_stopping_rounds=5, evals=[(dtrain, 'train')])
     print('Training is complete')
     bst = output['booster']
     hist = output['history']
@@ -303,40 +303,43 @@ def make_xgbmodel_pred(client, test_filenames, bst_assemble):
     client.cancel(X)
     client.cancel(y)
     client.cancel(total_datasets)
-    return np.array(this_rmse_col, this_r2_col)
+    return np.array(this_rmse_col), np.array(this_r2_col)
     # del dtrain
 
 
 def xgbmodel_testing_continuous():
-    datapath = './Outputs-2012'
+    datapath = './Outputs-2005'
     filenames_assemble = []
-    for i_te in range(0, 116, 2):
+    for i_te in range(0, 42, 2):
         filename = 'model_{}.model'.format(str(i_te).zfill(2))
         filenames_assemble.append(os.path.join(datapath, filename))
 
     bst_assemble = []
     for filename in filenames_assemble:
-        bst = xgb.Booster({'nthread': 4})
+        bst = xgb.Booster({'nthread': 40})
         bst.load_model(filename)
         bst_assemble.append(bst)
 
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2014*')))
     # train_filenames, test_filenames = train_test_filename(orig_filenames)
-    test_filenames = orig_filenames[0:4]
+    test_filenames = orig_filenames
     rmse_col = []
     r2_col = []
-
+    client = get_slurm_dask_client_savio2(6)
+    client.wait_for_workers(24)
     for i in range(0, len(test_filenames), 2):
-        client = get_slurm_dask_client_savio2(10)
-        client.wait_for_workers(40)
+        #client = get_slurm_dask_client_savio2(10)
+        #client.wait_for_workers(40)
         this_rmse_col, this_r2_col = make_xgbmodel_pred(client, test_filenames[i:i + 2], bst_assemble)
         rmse_col.append(np.array(this_rmse_col))
         r2_col.append(np.array(this_r2_col))
-        print('shutdown the client and wait for restart')
+        np.save('./Outputs-2005/rmse_elv.npy', np.array(rmse_col))
+        np.save('./Outputs-2005/r2_elv.npy', np.array(r2_col))
+        #print('shutdown the client and wait for restart')
         #client.restart()
-        client.shutdown()
-    np.save('./Outputs-2012/rmse_elv.npy', np.array(rmse_col))
-    np.save('./Outputs-2012/r2_elv.npy', np.array(r2_col))
+        #client.shutdown()
+    np.save('./Outputs-2005/rmse_elv.npy', np.array(rmse_col))
+    np.save('./Outputs-2005/r2_elv.npy', np.array(r2_col))
 
 
 
@@ -361,8 +364,8 @@ def save_datasets_test():
 
 if __name__=='__main__':
 #    save_datasets_test()
-    xgbmodel_testing_continuous()
-    #xgbmodel_training_continuous()
+#    xgbmodel_testing_continuous()
+    xgbmodel_training_continuous()
 #    client = get_slurm_dask_client_bigmem(8)
 #    client = get_slurm_dask_client_savio2(12)
     if False:
