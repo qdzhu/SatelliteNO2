@@ -122,6 +122,22 @@ def read_orig_file_from_wrf(filename):
     return additional_arr, x_arr, y_arr, x_labels, additional_features
 
 
+def create_index_list_for_patch_region():
+    """
+    Remove the boundary cells that surrounding cells are beyond domain
+    :return: list of index kept for cells
+    """
+    patch_range_xlon = range(2, 50)
+    patch_range_xlat = range(2, 25)
+    patch_indx = []
+    iter_combs = [(i, j) for i in patch_range_xlon for j in patch_range_xlat]
+
+    for i_indx_iter, j_indx_iter in iter_combs:
+        patch_indx.append(405 * j_indx_iter + i_indx_iter)
+
+    np.save('patch_cells_index', np.array(patch_indx))
+
+
 def create_index_list_for_target_cells():
     """
     Remove the boundary cells that surrounding cells are beyond domain
@@ -137,7 +153,6 @@ def create_index_list_for_target_cells():
         except ValueError:
             continue
     np.save('target_cells_index', np.array(full_indx))
-
 
 def create_index_dict_for_surrouding_emis():
     """
@@ -285,6 +300,7 @@ def const_features_for_single_grid(i_indx, j_indx):
 
 
 if __name__=='__main__':
+    create_index_list_for_target_cells()
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus*')))
     additional_arr, x_arr, y_arr, x_labels, additional_features = read_orig_file_from_wrf(orig_filenames[0])
 

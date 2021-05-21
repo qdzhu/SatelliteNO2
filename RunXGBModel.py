@@ -51,6 +51,7 @@ def get_slurm_dask_client_savio2(n_nodes):
     cluster.scale(n_nodes*4)
     client = Client(cluster)
     return client
+
 def get_slurm_dask_client_savio3(n_nodes):
     cluster = SLURMCluster(cores=32,
                            memory='96GB',
@@ -67,7 +68,8 @@ def get_slurm_dask_client_savio3(n_nodes):
 nvel = 29
 ngrid = 100250
 ntime = 16
-keep_indx = np.load('target_cells_index.npy')
+keep_indx = np.load('patch_cells_index.npy')
+#keep_indx = np.load('target_cells_index.npy')
 reader = csv.reader(open("surrouding_cells.csv", "r"))
 surr_arr = []
 for row in reader:
@@ -167,6 +169,7 @@ def make_xgbmodel(client, filename):
     del lightning_future
     datasets_future = client.scatter(datasets)
     return datasets_future
+
 
 def make_xgbmodel_final(client, train_filenames):
     create_total = True
