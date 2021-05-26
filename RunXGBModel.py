@@ -203,6 +203,7 @@ def make_xgbmodel_final(client, train_filenames):
     bst = output['booster']
     hist = output['history']
     print(hist)
+    bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Patch.model')
     bst.save_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/Outputs/model_00.model')
 #    bst.dump_model('/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/dump.raw.txt',
 #                   '/global/home/users/qindan_zhu/PYTHON/SatelliteNO2/featmap.txt')
@@ -254,6 +255,13 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
     del dtrain
 
 
+def xgbmodel_training_patch_region():
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
+    train_filenames = orig_filenames
+    client = get_slurm_dask_client_savio2(10)
+    client.wait_for_workers(40)
+    make_xgbmodel_final(client, train_filenames[:200])
+    client.shutdown()
 
 def xgbmodel_training_continuous():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
@@ -309,6 +317,13 @@ def make_xgbmodel_pred(client, test_filenames, bst_assemble):
     return np.array(this_rmse_col), np.array(this_r2_col)
     # del dtrain
 
+def xgbmodel_testing_patch():
+    bst_filename = './Patch.model'
+    bst = xgb.Booster({'nthread': 40})
+    bst.load_model(bst_filename)
+    bst_assemble = []
+    bst_assemble.append(bst)
+    
 
 def xgbmodel_testing_continuous():
     datapath = './Outputs-2005'
@@ -366,6 +381,7 @@ def save_datasets_test():
     df_slice.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False, chunksize=1000000)     
 
 if __name__=='__main__':
+    xgbmodel_training_patch_region()
 #    save_datasets_test()
 #    xgbmodel_testing_continuous()
     xgbmodel_training_continuous()
