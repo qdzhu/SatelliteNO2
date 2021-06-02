@@ -226,6 +226,7 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
         del this_dataset
     X = total_datasets[:, 1:]
     y = total_datasets[:, 0]
+    total_datasets.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False)
     #chunksize = int(X.shape[0]/32)
     chunksize = int(X.shape[0]/len(client.nthreads())/2)
     X = X.rechunk(chunks=(chunksize, 62))
@@ -260,7 +261,7 @@ def xgbmodel_training_patch_region():
     train_filenames = orig_filenames
     client = get_slurm_dask_client_savio2(10)
     client.wait_for_workers(40)
-    make_xgbmodel_final(client, train_filenames[:200])
+    make_xgbmodel_final(client, train_filenames[:20])
     client.shutdown()
 
 def xgbmodel_training_continuous():
@@ -384,7 +385,7 @@ if __name__=='__main__':
     xgbmodel_training_patch_region()
 #    save_datasets_test()
 #    xgbmodel_testing_continuous()
-    xgbmodel_training_continuous()
+#    xgbmodel_training_continuous()
 #    client = get_slurm_dask_client_bigmem(8)
 #    client = get_slurm_dask_client_savio2(12)
     if False:
