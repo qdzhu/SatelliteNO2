@@ -226,7 +226,7 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
         del this_dataset
     X = total_datasets[:, 1:]
     y = total_datasets[:, 0]
-    total_datasets.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False)
+    #total_datasets.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False)
     #chunksize = int(X.shape[0]/32)
     chunksize = int(X.shape[0]/len(client.nthreads())/2)
     X = X.rechunk(chunks=(chunksize, 62))
@@ -263,6 +263,26 @@ def xgbmodel_training_patch_region():
     client.wait_for_workers(40)
     make_xgbmodel_final(client, train_filenames[:20])
     client.shutdown()
+
+def make_training_patch_region():
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
+    train_filenames = orig_filenames
+    client = get_slurm_dask_client_savio2(10)
+    client.wait_for_workers(40)
+    create_total = True
+    for train_filename in train_filenames:
+        print('Reading training data {}'.format(train_filename))
+        this_dataset = make_xgbmodel(client, train_filename)
+        if create_total:
+            total_datasets = this_dataset.result()
+            create_total = False
+        else:
+            total_datasets = da.concatenate((total_datasets, this_dataset.result()), axis=0)
+        del this_dataset
+    df = dd.io.from_dask_array(total_datasets)
+    df.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/patch_01.csv', index=False,
+              single_file=True)
+
 
 def xgbmodel_training_continuous():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
@@ -382,7 +402,8 @@ def save_datasets_test():
     df_slice.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False, chunksize=1000000)     
 
 if __name__=='__main__':
-    xgbmodel_training_patch_region()
+    make_training_patch_region()
+    #xgbmodel_training_patch_region()
 #    save_datasets_test()
 #    xgbmodel_testing_continuous()
 #    xgbmodel_training_continuous()
