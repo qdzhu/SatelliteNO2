@@ -127,8 +127,8 @@ def create_index_list_for_patch_region():
     Remove the boundary cells that surrounding cells are beyond domain
     :return: list of index kept for cells
     """
-    patch_range_xlon = range(2, 25)
-    patch_range_xlat = range(2, 12)
+    patch_range_xlon = range(30, 55)
+    patch_range_xlat = range(90, 100)
     patch_indx = []
     iter_combs = [(i, j) for i in patch_range_xlon for j in patch_range_xlat]
 

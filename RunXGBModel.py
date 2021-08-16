@@ -56,7 +56,7 @@ def get_slurm_dask_client_savio3(n_nodes):
     cluster = SLURMCluster(cores=32,
                            memory='96GB',
                            project="co_aiolos",
-                           walltime="72:00:00",
+                           walltime="08:00:00",
                            queue="savio3",
                            local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
                            job_extra=['--qos="aiolos_savio3_normal"'])
@@ -259,16 +259,16 @@ def make_xgbmodel_final_update(client, train_filenames, i_te):
 def xgbmodel_training_patch_region():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
     train_filenames = orig_filenames
-    client = get_slurm_dask_client_savio2(10)
-    client.wait_for_workers(40)
+    client = get_slurm_dask_client_savio2(4)
+    client.wait_for_workers(16)
     make_xgbmodel_final(client, train_filenames[:20])
     client.shutdown()
 
 def make_training_patch_region():
     orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
     train_filenames = orig_filenames
-    client = get_slurm_dask_client_savio2(10)
-    client.wait_for_workers(40)
+    client = get_slurm_dask_client_savio2(6)
+    client.wait_for_workers(24)
     create_total = True
     for train_filename in train_filenames:
         print('Reading training data {}'.format(train_filename))
@@ -282,6 +282,23 @@ def make_training_patch_region():
     df = dd.io.from_dask_array(total_datasets)
     df.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/patch_01.csv', index=False,
               single_file=True)
+
+def make_training_patch_region_single():
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_2012*')))
+    train_filenames = orig_filenames
+    client = get_slurm_dask_client_savio2(6)
+    client.wait_for_workers(24)
+    n = 1
+    for train_filename in train_filenames:
+        print('Reading training data {}'.format(train_filename))
+        this_dataset = make_xgbmodel(client, train_filename)
+        total_datasets = this_dataset.result()
+        df = dd.io.from_dask_array(total_datasets)
+        save_filename = '/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/patch_{}.csv'.format(str(n).zfill(2))
+        df.to_csv(save_filename, index=False, single_file=True)
+        n = n + 1
+        del this_dateset
+        del total_datasets
 
 
 def xgbmodel_training_continuous():
@@ -402,7 +419,7 @@ def save_datasets_test():
     df_slice.to_csv('/global/home/users/qindan_zhu/myscratch/jlgrant/ML-WRF/ML-WRF/test_*.csv', index=False, chunksize=1000000)     
 
 if __name__=='__main__':
-    make_training_patch_region()
+    make_training_patch_region_single()
     #xgbmodel_training_patch_region()
 #    save_datasets_test()
 #    xgbmodel_testing_continuous()
