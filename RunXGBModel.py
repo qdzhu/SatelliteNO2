@@ -45,7 +45,7 @@ def get_slurm_dask_client_savio2(n_nodes):
                            project="co_aiolos",
                            walltime="10:00:00",
                            queue="savio",
-                           local_directory = '/global/home/users/qindan_zhu/myscratch/qindan_zhu/SatelliteNO2',
+                           local_directory = '/global/home/users/qindan_zhu/myscratchu/qindan_zhu/SatelliteNO2',
                            job_extra=['--qos="aiolos_savio_normal"'])
 
     cluster.scale(n_nodes*4)
@@ -121,6 +121,12 @@ def read_lightning_from_file_xr(filename):
     ic_flash = da.repeat(cum_ic_flash[1:, :, :]-cum_ic_flash[:-1, :, :], nvel, axis=2)
     cg_flash = da.repeat(cum_cg_flash[1:, :, :]-cum_cg_flash[:-1, :, :], nvel, axis=2)
     e_lightning = ic_flash + cg_flash
+    lightning_dis = [0.015, 0.235, 0.32, 0.0505, 0.065, 0.0575, 0.044, 0.0465, 0.057,
+                     0.0555, 0.035, 0.0115, 0.0045, 0.003, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    lightning_dis = da.array(lightning_dis).reshape(1, 1, nvel)
+    lightning_dis = da.repeat(lightning_dis, ntime, axis=0)
+    lightning_dis = da.repeat(lightning_dis, e_lightning.shape[1], axis=1)
+    e_lightning = e_lightning * lightning_dis
     this_var = e_lightning[:, keep_indx, :].flatten()
     surrs = []
     surrs.append(this_var)
