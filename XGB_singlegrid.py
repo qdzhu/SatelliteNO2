@@ -27,7 +27,7 @@ def get_slurm_dask_client_savio2(n_nodes):
 
 def prepare_inputs(client):
     orig_file_path = '/global/scratch-old/jlgrant/ML-WRF/ML-WRF/'
-    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus_*')))
+    orig_filenames = sorted(glob(os.path.join(orig_file_path, 'met_conus*')))
     for this_filename in orig_filenames:
         save_filename = os.path.basename(this_filename).replace('conus', 'patch')
         if not os.path.isfile(save_filename):
@@ -43,11 +43,15 @@ def prepare_inputs(client):
 
 
 def read_inputs(client, years):
-    df = dd.DataFrame()
+    create_df = True
     for year in years:
         filename = 'met_patch_{}_*'.format(year)
-        this_df = dd.read_csv(os.path.join(save_filepath, filename))
-        df = df.concat([df, this_df])
+        if create_df:
+            df = dd.read_csv(os.path.join(save_filepath, filename))
+            create_df = False
+        else:
+            this_df = dd.read_csv(os.path.join(save_filepath, filename))
+            df = dd.concat([df, this_df])
     X = df.iloc[:, 1:]
     y = np.log(df.iloc[:, 0] * 1e3)
     X, y = client.persist([X, y])
@@ -97,8 +101,8 @@ def main():
         train_model(client, args.years)
     elif args.process == 'Predict':
         do_prediction(client, args.years)
-
-
+    client.shutdown()
+    
 
 if __name__=='__main__':
     main()
