@@ -75,8 +75,28 @@ def train_model(client, years):
 
 
 
-def do_prediction(client, years, model):
-    return
+def do_prediction(client):
+    X, y = read_inputs(client, 2014)
+    ref_no2 = y.compute()
+    pres = X.iloc[:, 0].compute()
+    dtest = xgb.dask.DaskDMatrix(client, X, y)
+
+    save_data = []
+    save_data.append(pres)
+    save_data.append(ref_no2)
+
+    bst_assemble = []
+    filenames_assemble = sorted(glob(os.path.join(save_modelpath,
+                                                  'model_v*.model')))
+    print('Start making training datasets')
+    for filename in filenames_assemble:
+        print(filename)
+        bst = xgb.Booster({'nthread': 40})
+        bst.load_model(filename)
+        pred_no2 = xgb.dask.predict(client, bst_assemble[0], dtest)
+        save_data.append(pred_no2.compute())
+    np.save(os.path.join(save_modelpath, 'model_v_res.npy'), save_data)
+
 
 
 def _get_args():
@@ -100,7 +120,7 @@ def main():
     elif args.process == 'Train':
         train_model(client, args.years)
     elif args.process == 'Predict':
-        do_prediction(client, args.years)
+        do_prediction(client)
     client.shutdown()
     
 
