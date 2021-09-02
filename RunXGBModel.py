@@ -101,7 +101,7 @@ def read_2d_var_from_file_xr(filename, varname):
 def read_hour_from_file_xr(filename):
     ds = xr.open_mfdataset(filename, parallel=True)
     this_data = da.array(ds['hour']).reshape((17, 1, 1))
-    da.repeat(da.repeat(da.array(this_data[1:, :]), len(keep_indx), axis=1), nvel, axis=2).flatten()
+    da.repeat(da.repeat(da.array(this_data[1:, :, :]), len(keep_indx), axis=1), nvel, axis=2).flatten()
 
 
 def read_wind_from_file_xr(filename):
