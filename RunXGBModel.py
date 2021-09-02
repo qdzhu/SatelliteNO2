@@ -165,6 +165,7 @@ def make_xgbmodel(client, filename):
     dirt_feature = da.stack([future.result() for future in futures])
     client.cancel(futures)
     hour_feature = client.submit(read_wind_from_file_xr, filename)
+    hour_feature = hour_feature.result()
     varnames_2d = ['COSZEN', 'PBLH', 'LAI', 'HGT', 'SWDOWN', 'GLW']
     futures_2d = []
     for varname in varnames_2d:
@@ -175,7 +176,8 @@ def make_xgbmodel(client, filename):
     wind_feature = client.submit(read_wind_from_file_xr, filename)
     anthroemis_future = client.submit(read_anthro_emis_from_file_xr, filename)
     lightning_future = client.submit(read_lightning_from_file_xr, filename)
-    datasets = da.transpose(da.concatenate((dirt_feature, hour_feature, dirt2d_feature, wind_feature.result(), anthroemis_future.result(), lightning_future.result()),axis=0))
+    datasets = da.transpose(da.concatenate((dirt_feature, hour_feature, dirt2d_feature, wind_feature.result(),
+                                            anthroemis_future.result(), lightning_future.result()), axis=0))
     client.cancel(dirt_feature)
     client.cancel(dirt2d_feature)
     del wind_feature
